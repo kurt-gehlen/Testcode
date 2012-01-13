@@ -27,12 +27,12 @@ typedef struct AvlTree
 
 
 int		AVL_initialize( AvlTree *, int itemSize, CompFunc comp );
-Node *	AVL_insert( AvlTree *, void * );
+void *	AVL_insert( AvlTree *, void * );
 Node *	AVL_remove( AvlTree *, void * );
 Node *	AVL_find( AvlTree*, void * );
 void	AVL_print( AvlTree *,  PrintFunc );
 void	AVL_delete( AvlTree * );
-int		AVL_validate( AvlTree *, PrintFunc );
+int		AVL_validate( AvlTree *, CompFunc, PrintFunc );
 
 
 #ifdef __cplusplus

@@ -5,6 +5,8 @@
 #include <string>
 #include <ext/hash_set>
 
+#include <getopt.h>
+
 using namespace std;
 using namespace __gnu_cxx;
 
@@ -26,7 +28,8 @@ void printLong( void * a )
 	if ( !a )
 		printf("What???\n");
 	long i = *(long *)a;
-	cout << i << endl;
+	//cout << i << endl;
+	printf("%ld",i);
 }
 
 
@@ -45,8 +48,65 @@ main( int argc, char ** argv )
 {
 	AvlTree a;
 	long v;
-	char c;
+	int icnt = 0,dcnt = 0,sdcnt = 0;
 	
+	unsigned int seed = time(0);
+	long range = 0;
+	long r_factor = 0;
+	bool stopOnError = false;
+	bool quiet = true;
+
+	char c;
+    while ( (c = getopt(argc,argv,"s:d:r:ev")) != -1 )
+    {
+        switch(c)
+        {
+            case 's':
+            {
+                seed = atoi(optarg);
+
+            } break;
+
+            case 'd':
+            {
+                r_factor = atoi(optarg);
+
+            } break;
+
+            case 'r':
+            {
+                range = atoi(optarg);
+
+            } break;
+
+            case 'e':
+            {
+            	stopOnError = true;
+
+            } break;
+
+            case 'v':
+            {
+            	quiet = false;
+
+            } break;
+
+            default:
+                printf("bad option: %c\n",c);
+                return -1;;
+        }
+    }
+
+    if ( optind >= argc )
+    {
+    	printf("usage:\n");
+    	return -1;
+    }
+
+    v = atoi(argv[optind]);
+    if ( range == 0 )
+    	range = v;
+
 	AVL_initialize( &a, sizeof(long), compareLong );
 	
 	if ( argc == 1 )
@@ -75,83 +135,139 @@ main( int argc, char ** argv )
 	}
 	else
 	{
-		v = atol(argv[1]);
+		srandom(seed);
 
-		int r_factor = argc > 2 ? atol(argv[2]) : 0;
-
-		printf("running auto test (%ld iterations)...\n",v);
+		printf("running auto test (%ld iterations) w/ seed %u, remove 1/%ld...\n",v,seed,r_factor);
 		
 		hash_set<long> in_use;
 
 		long i;
-		long range = v * 4;
 
 		for ( i = 0; i < v; ++i )
 		{
 			long x = random() % range;
+			int op = 0,op2 = 0;
 			if ( r_factor && (i%r_factor) == 0 )
 			{
-				AVL_remove(&a,&x);
-				in_use.erase( x );
+				long x2 = x;
+				op = 1;
+
+				if ( in_use.find(x) == in_use.end() )
+				{
+					op2 = 0;
+					AVL_insert(&a,&x);
+				}
+
+				if ( AVL_remove(&a,&x) )
+					sdcnt++;
+				else
+				{
+					printf("How could we not find that %ld %s?\n", x, in_use.find( x ) == in_use.end() ? "huh?" : "" );
+					//break;
+				}
+if ( AVL_find(&a,&x) ) printf("Removed node but its still there\n");
+				in_use.erase( x2 );
+				dcnt++;
 			}
 			else
 			{
 				AVL_insert( &a, &x );
 				in_use.insert(x);
+				icnt++;
 			}
 
-			if ( AVL_validate( &a, printLong ) )
+			if ( 0 )
 			{
-				printf("Invalid tree, stopping test\n");
-				break;
-			}
-		}
+				bool good = true;
 
-		if ( i == v )
-		{
-			printf("Inserts good.  Testing finds... %d %d\n", a.count, in_use.size());
-
-			for ( i = 0; i < range; ++i )
-			{
-				Node * found = AVL_find( &a, &i );
-
-				if ( found != 0 && in_use.find(i) == in_use.end() )
+				if ( in_use.size() != a.count )
 				{
-					printf("Found %ld, shouldn't have\n",i);
-					break;
+					printf("Size mismatch: %d %d\n",in_use.size(),a.count);
+					good = false;
 				}
 
-				if ( found == 0 && in_use.find(i) != in_use.end() )
+				for ( hash_set<long>::iterator itr = in_use.begin(); itr != in_use.end(); ++itr )
 				{
-					printf("Didn't find %ld, should have\n",i);
-					break;
-				}
-
-				if ( found )
-				{
-					long val = *(long *)(found + 1);
-					if ( val != i )
+					long x = *itr;
+					if ( AVL_find( &a, &x) == 0 )
 					{
-						printf("Item found but wrong: %ld %ld\n",val,i);
-						break;
+						printf("Should have %ld, didn't\n",x);
+						good = false;
 					}
 				}
+
+				if ( !good )
+				{
+					printf("Invalid tree after iteration %d, performing %s%s of %ld, stopping test\n", i, (op2 ? "(auto)" : ""), (op == 0 ? "add":"remove"), x );
+					break;
+				}
 			}
 
-			if ( i != range )
+			if ( stopOnError )
 			{
-				printf("test failed\n");
+				if ( AVL_validate( &a, compareLong, printLong ) )
+				{
+					printf("Invalid tree after iteration %d, performing %s%s of %ld, stopping test\n", i, (op2 ? "(auto)" : ""), (op == 0 ? "add":"remove"), x );
+					goto end;
+				}
 			}
-			else
-				printf("test successful\n");
 		}
 
-//		AVL_print( &a, printLong );
+		printf("Inserts done.\n");
+
+		if ( AVL_validate( &a, compareLong, printLong ) )
+		{
+			printf("Tree not a valid avl tree\n");
+		}
+		else
+		{
+			int status = 0;
+			if ( i == v )
+			{
+				printf("Testing finds... %d %d\n", a.count, in_use.size());
+
+				for ( i = 0; i < range; ++i )
+				{
+					Node * found = AVL_find( &a, &i );
+
+					if ( found != 0 && in_use.find(i) == in_use.end() )
+					{
+						printf("Found %ld, shouldn't have\n",i);
+						status = 1;//break;
+					}
+
+					if ( found == 0 && in_use.find(i) != in_use.end() )
+					{
+						printf("Didn't find %ld, should have\n",i);
+						status = 1;//break;
+					}
+
+					if ( found )
+					{
+						long val = *(long *)(found + 1);
+						if ( val != i )
+						{
+							printf("Item found but wrong: %ld %ld\n",val,i);
+							status = 1;//break;
+						}
+					}
+				}
+
+				if ( status != 0 )
+				{
+					printf("test failed\n");
+				}
+				else
+					printf("test successful\n");
+			}
+		}
 	}
 	
 end:
 
-///	dumpNode( a.root, 5 );
+	printf( "%d inserts, %d deletes (%d in tree) completed\n",icnt,dcnt,sdcnt);
+
+	AVL_print( &a, quiet ? 0 : printLong );
 
 	AVL_delete( &a );
 }

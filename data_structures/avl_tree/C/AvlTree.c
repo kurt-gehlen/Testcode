@@ -21,6 +21,104 @@ avl_balance( Node * n )
 }
 
 
+int valptrs( Node * node )
+{
+	int status = 0;
+
+	if ( node->left && node->left->parent != node )
+	{
+		status = -1;
+	}
+
+	if ( node->right && node->right->parent != node )
+	{
+		status = -1;
+	}
+
+	return status;
+}
+
+int
+avl_validate( Node * node, CompFunc comp, PrintFunc print, int verbose, int * c )
+{
+	int status = 0;
+
+	(*c)++;
+
+	if ( node->left && node->left->parent != node )
+	{
+		if ( verbose ) printf("mismatched parent (left) l = %lx lp = %lx n = %lx\n", node->left, node->left->parent, node );
+		status = -1;
+	}
+
+	if ( node->right && node->right->parent != node )
+	{
+		if ( verbose ) printf("mismatched parent (right) r = %lx rp = %lx n = %lx\n", node->right, node->right->parent, node );
+		status = -1;
+	}
+
+	if ( avl_height(node) != max(avl_height(node->left),avl_height(node->right)) + 1 )
+	{
+		if ( verbose ) printf("Height mismatch %d %d %d\n", avl_height(node), avl_height(node->left), avl_height(node->right) );
+		status = -1;
+	}
+
+	if ( abs(avl_balance(node)) > 1 )
+	{
+		if ( verbose )
+		{
+			printf("Balance mismatch %d (%x) %d %lx(%d) %lx(%d)\n", avl_balance(node), node, node->height, node->left, avl_height(node->left), node->right, avl_height(node->right) );
+			if ( print )
+			{
+				print( node + 1 );
+				if ( node->left ) {	printf("\nleft "); print(node->left + 1); }
+				if ( node->right ) { printf("\nright "); print(node->right + 1); }
+				printf("\n");
+			}
+		}
+		status = -1;
+	}
+
+	if ( node->left == 0 && node->right == 0 && node->height != 0 )
+	{
+		if ( verbose ) printf("Invalid height in leaf node: %d\n", node->height );
+		status = -1;
+	}
+
+	if ( node->left )
+	{
+		if ( comp )
+		{
+			if ( comp(node->left + 1,node + 1) >= 0 )
+			{
+				if ( verbose ) { printf("sort failure (left)\n"); }
+				status = -1;
+			}
+		}
+
+		if ( avl_validate(node->left,comp,print,verbose,c) != 0 )
+			status = -1;
+	}
+
+	if ( node->right )
+	{
+		if ( comp )
+		{
+			if ( comp(node->right + 1,node + 1) <= 0 )
+			{
+				if ( verbose ) printf("sort failure (right)\n");
+				status = -1;
+			}
+		}
+
+		if ( avl_validate(node->right, comp, print, verbose,c) != 0 )
+			status = -1;
+	}
+
+	return status;
+}
+
+
 static int
 avl_ll_rebalance( Node ** node )
 {
@@ -28,6 +126,8 @@ avl_ll_rebalance( Node ** node )
 	Node * leftChild = currentTop->left;
 
 	currentTop->left  = leftChild->right;
+	if ( leftChild->right )
+		leftChild->right->parent = currentTop;
 	leftChild->right = currentTop;
 	leftChild->parent = currentTop->parent;
 	currentTop->parent = leftChild;
@@ -46,6 +146,8 @@ avl_rr_rebalance( Node ** node )
 	Node * rightChild = currentTop->right;
 
 	currentTop->right  = rightChild->left;
+	if ( rightChild->left )
+		rightChild->left->parent = currentTop;
 	rightChild->left = currentTop;
 	rightChild->parent = currentTop->parent;
 	currentTop->parent = rightChild;
@@ -102,14 +204,14 @@ avl_rebalance( Node ** node )
 
 	if ( balance < -1 )
 	{
-		if ( avl_balance((*node)->right) < 0  )
+		if ( avl_balance((*node)->right) <= 0 )
 			avl_rr_rebalance( node );
 		else
 			avl_rl_rebalance( node );
 	}
 	else if ( balance > 1 )
 	{
-		if ( avl_balance((*node)->left) > 0  )
+		if ( avl_balance((*node)->left) >= 0 )
 			avl_ll_rebalance( node );
 		else
 			avl_lr_rebalance( node );
@@ -117,6 +219,8 @@ avl_rebalance( Node ** node )
 
 	Node * n = *node;
 	n->height = 1 + max( avl_height(n->left), avl_height(n->right) );
+
+	return abs(balance);
 }
 
 
@@ -146,8 +250,8 @@ avl_insert( AvlTree * tree, Node ** node, void * e )
 
 	if ( comp == 0 )
 	{
+		// Its already here
 		memcpy( n + 1, e, tree->itemSize );
-
 		r = n;
 	}
 	else
@@ -195,7 +299,7 @@ avl_findMax( AvlTree * tree, Node * node )
 	if ( node )
 	{
 		if ( node->right )
-			foundNode = avl_findMax( tree, node->left );
+			foundNode = avl_findMax( tree, node->right );
 	}
 
 	return foundNode;
@@ -228,11 +332,11 @@ avl_remove( AvlTree * tree, Node ** node, void * e )
 	if ( foundNode )
 	{
 		Node * parent = 0;
+
 		if ( foundNode->right || foundNode->left )
 		{
 			Node * newSubRoot;
 
-			printf("Remove node w/ branches\n");
 			if ( foundNode->right )
 				newSubRoot = avl_findMin( tree, foundNode->right );
 			else
@@ -245,16 +349,67 @@ avl_remove( AvlTree * tree, Node ** node, void * e )
 
 		parent = foundNode->parent;
 
+		if ( foundNode->left && foundNode->right )
+			printf("This node shouldn't be removed\n");
+
 		if ( parent )
 		{
 			if ( foundNode == parent->left )
-				parent->left = 0;
+			{
+				if ( foundNode->right )
+					parent->left = foundNode->right;
+				else
+					parent->left = foundNode->left;
+
+				if ( parent->left )
+					parent->left->parent = parent;
+			}
 			else if ( foundNode == parent->right )
-				parent->right = 0;
+			{
+				if( foundNode->right )
+					parent->right = foundNode->right;
+				else
+					parent->right = foundNode->left;
+
+				if ( parent->right )
+					parent->right->parent = parent;
+			}
 			else
 				printf("Shouldn't have happend\n");
 
+			while ( parent )
+			{
+				parent->height = max( avl_height(parent->left), avl_height(parent->right) ) + 1;
 
+				Node ** gpc;
+
+				Node * gp = parent->parent;
+
+				if ( gp )
+				{
+					if ( parent == gp->right )
+						gpc = &gp->right;
+					else if ( parent == gp->left )
+						gpc = &gp->left;
+					else
+					{
+						printf("mismatched parents shouldn't happen\n");
+
+						return 0;
+					}
+				}
+				else
+					gpc = &tree->root;
+
+				avl_rebalance( gpc );
+
+				parent = *gpc;
+
+				if ( parent )
+				{
+					parent = parent->parent;
+				}
+			}
 		}
 
 		if ( foundNode == *node )
@@ -263,7 +418,11 @@ avl_remove( AvlTree * tree, Node ** node, void * e )
 		free( foundNode );
 
 		tree->count--;
+
+		return (Node *)1;
 	}
+
+	return 0;
 }
 
 
@@ -276,6 +435,7 @@ avl_print( Node * node, PrintFunc print )
 			avl_print( node->left, print );
 		printf( "Node height: %d ", node->height );
 		print( node + 1 );
+		printf( "\n" );
 		if ( node->right )
 			avl_print( node->right, print );
 	}
@@ -316,10 +476,12 @@ AVL_delete( AvlTree * tree )
 }
 
 
-Node *
+void *
 AVL_insert( AvlTree * tree, void * e )
 {
-	return avl_insert( tree, &tree->root, e );
+	Node * n = avl_insert( tree, &tree->root, e );
+
+	return n ? n + 1 : 0;
 }
 
 
@@ -340,56 +502,28 @@ AVL_find( AvlTree * tree, void * e )
 void
 AVL_print( AvlTree * tree, PrintFunc print )
 {
-	printf("Tree w/ %d nodes\n",tree->count);
-	avl_print( tree->root, print );
+	printf("Tree w/ %d nodes of height %d\n",tree->count,avl_height(tree->root) );
+	if ( print )
+		avl_print( tree->root, print );
 }
 
 
 int
-avl_validate( Node * node, PrintFunc print )
-{
-	int status = 0;
-#if 0
-	if ( node->left && node->left->parent != node )
-	{
-		printf("mismatched parent (left) %lx %lx\n", node->left->parent, node );
-		status = -1;
-	}
-
-	if ( node->right && node->right->parent != node )
-	{
-		printf("mismatched parent (right) %lx %lx\n", node->right->parent, node );
-		status = -1;
-	}
-#endif
-	if ( avl_height(node) != max(avl_height(node->left),avl_height(node->right)) + 1 )
-	{
-		printf("Height mismatch %d %d %d\n", avl_height(node), avl_height(node->left), avl_height(node->right) );
-		status = -1;
-	}
-
-	if ( abs(avl_balance(node)) > 1 )
-	{
-		printf("Balance mismatch %d\n", avl_balance(node) );
-		status -1;
-	}
-
-	if ( node->left )
-		if ( avl_validate(node->left,print) != 0 )
-			status = -1;
-
-	if ( node->right )
-		if ( avl_validate(node->right,print) != 0 )
-			status = -1;
-
-	return status;
-}
-
-int
-AVL_validate( AvlTree * tree, PrintFunc print )
+AVL_validate( AvlTree * tree, CompFunc comp, PrintFunc print )
 {
 	if ( tree->root )
-		return avl_validate( tree->root, print );
+	{
+		int c = 0;
+		int status = avl_validate( tree->root, comp, print, 1, &c );
+
+		if ( tree->count != c )
+		{
+			printf("Mismatched node count %d %d\n", tree->count, c );
+			status = -1;
+		}
+
+		return status;
+	}
 
 	return 0;
 }
