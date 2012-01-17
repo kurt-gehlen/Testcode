@@ -157,15 +157,15 @@ main( int argc, char ** argv )
 					op2 = 0;
 					AVL_insert(&a,&x);
 				}
-
-				if ( AVL_remove(&a,&x) )
-					sdcnt++;
 				else
+					sdcnt++;
+
+				if ( !AVL_remove(&a,&x) )
 				{
 					printf("How could we not find that %ld %s?\n", x, in_use.find( x ) == in_use.end() ? "huh?" : "" );
 					//break;
 				}
-if ( AVL_find(&a,&x) ) printf("Removed node but its still there\n");
+
 				in_use.erase( x2 );
 				dcnt++;
 			}
@@ -265,7 +265,7 @@ if ( AVL_find(&a,&x) ) printf("Removed node but its still there\n");
 	
 end:
 
-	printf( "%d inserts, %d deletes (%d in tree) completed\n",icnt,dcnt,sdcnt);
+	printf( "%d inserts, %d deletes (%d already in tree) completed\n",icnt,dcnt,sdcnt);
 
 	AVL_print( &a, quiet ? 0 : printLong );
 

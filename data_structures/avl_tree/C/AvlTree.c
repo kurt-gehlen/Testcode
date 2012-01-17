@@ -21,24 +21,7 @@ avl_balance( Node * n )
 }
 
 
-int valptrs( Node * node )
-{
-	int status = 0;
-
-	if ( node->left && node->left->parent != node )
-	{
-		status = -1;
-	}
-
-	if ( node->right && node->right->parent != node )
-	{
-		status = -1;
-	}
-
-	return status;
-}
-
-int
+static int
 avl_validate( Node * node, CompFunc comp, PrintFunc print, int verbose, int * c )
 {
 	int status = 0;
@@ -119,7 +102,7 @@ avl_validate( Node * node, CompFunc comp, PrintFunc print, int verbose, int * c 
 }
 
 
-static int
+static inline int
 avl_ll_rebalance( Node ** node )
 {
 	Node * currentTop = *node;
@@ -139,7 +122,7 @@ avl_ll_rebalance( Node ** node )
 }
 
 
-static int
+static inline int
 avl_rr_rebalance( Node ** node )
 {
 	Node * currentTop = *node;
@@ -159,7 +142,7 @@ avl_rr_rebalance( Node ** node )
 }
 
 
-static int
+static inline int
 avl_lr_rebalance( Node ** node )
 {
 	avl_rr_rebalance( &(*node)->left );
@@ -167,37 +150,15 @@ avl_lr_rebalance( Node ** node )
 }
 
 
-static int
+static inline int
 avl_rl_rebalance( Node ** node )
 {
 	avl_ll_rebalance( &(*node)->right );
 	avl_rr_rebalance( node );
 }
 
-static Node *
-avl_allocNode( AvlTree * tree, void * e )
-{
-	Node * newNode = (Node *)malloc( sizeof(Node) + tree->itemSize );
 
-	if ( newNode )
-	{
-		newNode->parent = 0;
-		newNode->left = 0;
-		newNode->right = 0;
-		newNode->height = 0;
-
-		if ( e )
-		{
-			void * element = (void *)(newNode + 1);
-			memcpy( element, e, tree->itemSize );
-		}
-	}
-
-	return newNode;
-}
-
-
-int
+static inline int
 avl_rebalance( Node ** node )
 {
 	int balance = avl_balance(*node);
@@ -224,7 +185,30 @@ avl_rebalance( Node ** node )
 }
 
 
-Node *
+static Node *
+avl_allocNode( AvlTree * tree, void * e )
+{
+	Node * newNode = (Node *)malloc( sizeof(Node) + tree->itemSize );
+
+	if ( newNode )
+	{
+		newNode->parent = 0;
+		newNode->left = 0;
+		newNode->right = 0;
+		newNode->height = 0;
+
+		if ( e )
+		{
+			void * element = (void *)(newNode + 1);
+			memcpy( element, e, tree->itemSize );
+		}
+	}
+
+	return newNode;
+}
+
+
+static Node *
 avl_insert( AvlTree * tree, Node ** node, void * e )
 {
 	if ( *node == 0 )
@@ -251,7 +235,7 @@ avl_insert( AvlTree * tree, Node ** node, void * e )
 	if ( comp == 0 )
 	{
 		// Its already here
-		memcpy( n + 1, e, tree->itemSize );
+//		memcpy( n + 1, e, tree->itemSize );
 		r = n;
 	}
 	else
@@ -278,7 +262,7 @@ avl_insert( AvlTree * tree, Node ** node, void * e )
 }
 
 
-Node *
+static Node *
 avl_findMin( AvlTree * tree, Node * node )
 {
 	Node * foundNode = node;
@@ -292,7 +276,7 @@ avl_findMin( AvlTree * tree, Node * node )
 }
 
 
-Node *
+static Node *
 avl_findMax( AvlTree * tree, Node * node )
 {
 	Node * foundNode = node;
@@ -306,7 +290,7 @@ avl_findMax( AvlTree * tree, Node * node )
 }
 
 
-Node *
+static Node *
 avl_find( AvlTree * tree, Node * node, void * e )
 {
 	Node * foundNode = 0;
@@ -325,7 +309,7 @@ avl_find( AvlTree * tree, Node * node, void * e )
 }
 
 
-Node *
+static Node *
 avl_remove( AvlTree * tree, Node ** node, void * e )
 {
 	Node * foundNode = avl_find( tree, *node, e );
@@ -379,6 +363,8 @@ avl_remove( AvlTree * tree, Node ** node, void * e )
 
 			while ( parent )
 			{
+				int  orig_height = parent->height;
+
 				parent->height = max( avl_height(parent->left), avl_height(parent->right) ) + 1;
 
 				Node ** gpc;
@@ -407,6 +393,9 @@ avl_remove( AvlTree * tree, Node ** node, void * e )
 
 				if ( parent )
 				{
+					if ( orig_height == parent->height )
+						break;
+
 					parent = parent->parent;
 				}
 			}
@@ -426,7 +415,7 @@ avl_remove( AvlTree * tree, Node ** node, void * e )
 }
 
 
-void
+static void
 avl_print( Node * node, PrintFunc print )
 {
 	if ( node )
@@ -442,7 +431,7 @@ avl_print( Node * node, PrintFunc print )
 }
 
 
-void
+static void
 avl_delete( Node * node )
 {
 	if ( node )
