@@ -16,6 +16,7 @@ typedef struct Node
 
 typedef int (*CompFunc)(void *, void *);
 typedef void (*PrintFunc)(void *);
+typedef int (*OpFunc)( void *, void * );
 
 typedef struct AvlTree
 {
@@ -28,12 +29,14 @@ typedef struct AvlTree
 
 int		AVL_initialize( AvlTree *, int itemSize, CompFunc comp );
 void *	AVL_insert( AvlTree *, void * );
-Node *	AVL_remove( AvlTree *, void * );
-Node *	AVL_find( AvlTree*, void * );
+void *	AVL_remove( AvlTree *, void * );
+void *	AVL_find( AvlTree*, void * );
 void	AVL_print( AvlTree *,  PrintFunc );
-void	AVL_delete( AvlTree * );
+void	AVL_delete( AvlTree *, OpFunc del );
 int		AVL_validate( AvlTree *, CompFunc, PrintFunc );
-
+int		AVL_iterate( AvlTree *, OpFunc, void * );
+void *	AVL_first( AvlTree * );
+void *	AVL_next( AvlTree *, void * );
 
 #ifdef __cplusplus
 }

@@ -10,8 +10,29 @@
 using namespace std;
 using namespace __gnu_cxx;
 
+int jim = 44;
+
+
+int collectLessThan( void * a, void * b )
+{
+	hash_set<long> * hs = (hash_set<long> *)b;
+
+	long l = *(long *)a;
+
+	if ( l > jim )
+	{
+		printf ("stopping at %ld\n",l);
+		return -1;
+	}
+
+	hs->insert(l);
+
+	return 0;
+}
+
 int compareLong( void * a, void * b )
 {
+/*
 	long i = *(long *)a;
 	long j = *(long *)b;
 	
@@ -21,6 +42,8 @@ int compareLong( void * a, void * b )
 		return 1;
 	
 	return 0;
+*/
+	return *(unsigned long *)a - *(unsigned long *)b;
 }
 
 void printLong( void * a )
@@ -55,9 +78,10 @@ main( int argc, char ** argv )
 	long r_factor = 0;
 	bool stopOnError = false;
 	bool quiet = true;
+	bool iterate = false;
 
 	char c;
-    while ( (c = getopt(argc,argv,"s:d:r:ev")) != -1 )
+    while ( (c = getopt(argc,argv,"s:d:r:evi")) != -1 )
     {
         switch(c)
         {
@@ -91,6 +115,11 @@ main( int argc, char ** argv )
 
             } break;
 
+            case 'i':
+            {
+            	iterate = true;
+
+            } break;
             default:
                 printf("bad option: %c\n",c);
                 return -1;;
@@ -228,7 +257,7 @@ main( int argc, char ** argv )
 
 				for ( i = 0; i < range; ++i )
 				{
-					Node * found = AVL_find( &a, &i );
+					void * found = AVL_find( &a, &i );
 
 					if ( found != 0 && in_use.find(i) == in_use.end() )
 					{
@@ -244,7 +273,7 @@ main( int argc, char ** argv )
 
 					if ( found )
 					{
-						long val = *(long *)(found + 1);
+						long val = *(long *)(found);
 						if ( val != i )
 						{
 							printf("Item found but wrong: %ld %ld\n",val,i);
@@ -269,5 +298,14 @@ end:
 
 	AVL_print( &a, quiet ? 0 : printLong );
 
-	AVL_delete( &a );
+	if ( iterate )
+	{
+		int i = 0;
+		for ( void * itr = AVL_first( &a ); itr; itr = AVL_next( &a, itr ) )
+		{
+			printf( "%d: ", i++); printLong( itr ); printf("\n");
+		}
+	}
+
+	AVL_delete( &a, 0 );
 }

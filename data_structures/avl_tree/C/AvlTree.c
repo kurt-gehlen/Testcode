@@ -415,6 +415,49 @@ avl_remove( AvlTree * tree, Node ** node, void * e )
 }
 
 
+static int
+avl_iterate( AvlTree * tree, Node * node, OpFunc op, void * param )
+{
+	if( node->left )
+	{
+		if ( avl_iterate( tree, node->left, op, param ) == -1 )
+			return -1;
+	}
+
+	if ( op( node + 1, param ) == -1 )
+		return -1;
+
+	if ( node->right )
+	{
+		if ( avl_iterate( tree, node->right, op, param ) == -1 )
+			return -1;
+	}
+
+	return 0;
+}
+
+
+static Node *
+avl_next( AvlTree * tree, Node * node )
+{
+	if ( node->right )
+		return avl_findMin( tree, node->right );
+
+	if ( node->parent )
+	{
+		for ( ; node->parent; node = node->parent )
+		{
+			if ( node == node->parent->left )
+				break;
+		}
+
+		return node->parent;
+	}
+
+	return 0;
+}
+
+
 static void
 avl_print( Node * node, PrintFunc print )
 {
@@ -432,14 +475,17 @@ avl_print( Node * node, PrintFunc print )
 
 
 static void
-avl_delete( Node * node )
+avl_delete( Node * node, OpFunc del )
 {
 	if ( node )
 	{
 		if ( node->left )
-			avl_delete( node->left );
-		if ( node->right )
-			avl_delete( node->right );
+			avl_delete( node->left, del );
+		if ( node->right, del )
+			avl_delete( node->right, del );
+
+		if ( del )
+			del( node + 1, 0 );
 
 		free( node );
 	}
@@ -457,9 +503,9 @@ AVL_initialize( AvlTree * tree, int itemSize, CompFunc comp )
 
 
 void
-AVL_delete( AvlTree * tree )
+AVL_delete( AvlTree * tree, OpFunc del )
 {
-	avl_delete( tree->root );
+	avl_delete( tree->root, del );
 
 	tree->root = 0;
 }
@@ -474,17 +520,19 @@ AVL_insert( AvlTree * tree, void * e )
 }
 
 
-Node *
+void *
 AVL_remove( AvlTree * tree, void * e )
 {
 	return avl_remove( tree, &tree->root, e );
 }
 
 
-Node *
+void *
 AVL_find( AvlTree * tree, void * e )
 {
-	return avl_find( tree, tree->root, e );
+	Node * n = avl_find( tree, tree->root, e );
+
+	return n ? n + 1 : 0;
 }
 
 
@@ -515,4 +563,44 @@ AVL_validate( AvlTree * tree, CompFunc comp, PrintFunc print )
 	}
 
 	return 0;
+}
+
+
+int
+AVL_iterate( AvlTree * tree, OpFunc op, void * param )
+{
+	if ( tree->root )
+		return avl_iterate( tree, tree->root, op, param );
+
+	return 0;
+}
+
+
+void *
+AVL_next( AvlTree * tree, void * current )
+{
+	Node * node = 0;
+
+	if ( current )
+	{
+		node = (Node *)current - 1;
+
+		node = avl_next( tree, node );
+	}
+
+	return node ? node + 1 : 0;
+}
+
+
+void *
+AVL_first( AvlTree * tree )
+{
+	Node * node = 0;
+
+	if ( tree->root )
+	{
+		node = avl_findMin( tree, tree->root );
+	}
+
+	return node ? node + 1 : 0;
 }
