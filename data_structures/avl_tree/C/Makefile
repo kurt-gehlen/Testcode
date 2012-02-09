@@ -1,3 +1,5 @@
 
+DFLAGS = 
+
 all:
-	g++ -o test -g test.cpp AvlTree.c
+	g++ -o test $(DFLAGS) -g test.cpp AvlTree.c

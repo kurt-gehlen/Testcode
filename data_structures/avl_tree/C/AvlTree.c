@@ -208,6 +208,7 @@ avl_allocNode( AvlTree * tree, void * e )
 }
 
 
+#ifndef _NON_RECURSIVE_
 static Node *
 avl_insert( AvlTree * tree, Node ** node, void * e )
 {
@@ -260,8 +261,95 @@ avl_insert( AvlTree * tree, Node ** node, void * e )
 
 	return r;
 }
+#else
+static Node *
+avl_insert( AvlTree * tree, Node ** node, void * e )
+{
+	Node * parent = 0;
 
+	while( *node )
+	{
+		Node * n = *node;
 
+		int comp = tree->compare( e, n + 1 );
+
+		if ( comp == 0 )
+		{
+			// Its already here
+			memcpy( n + 1, e, tree->itemSize );
+
+			return n;
+		}
+		else
+		{
+			parent = n;
+
+			if ( comp < 0 )
+			{
+				node = &n->left;
+			}
+			else if ( comp > 0 )
+			{
+				node = &n->right;
+			}
+		}
+	}
+
+	// Found space, create and insert
+	Node * foundNode = avl_allocNode( tree, e );
+	if ( foundNode )
+	{
+		*node = foundNode;
+		foundNode->parent = parent;
+		tree->count++;
+
+		// Rebalance the tree
+
+		while ( parent )
+		{
+			int  orig_height = parent->height;
+
+			parent->height = max( avl_height(parent->left), avl_height(parent->right) ) + 1;
+
+			Node ** gpc;
+
+			Node * gp = parent->parent;
+
+			if ( gp )
+			{
+				if ( parent == gp->right )
+					gpc = &gp->right;
+				else if ( parent == gp->left )
+					gpc = &gp->left;
+				else
+				{
+					printf("mismatched parents shouldn't happen\n");
+
+					return 0;
+				}
+			}
+			else
+				gpc = &tree->root;
+
+			avl_rebalance( gpc );
+
+			parent = *gpc;
+
+			if ( parent )
+			{
+				if ( orig_height == parent->height )
+					break;
+
+				parent = parent->parent;
+			}
+		}
+	}
+
+	return foundNode;
+}
+#endif
+
+#ifndef _NON_RECURSIVE_
 static Node *
 avl_findMin( AvlTree * tree, Node * node )
 {
@@ -274,8 +362,23 @@ avl_findMin( AvlTree * tree, Node * node )
 
 	return foundNode;
 }
+#else
+static Node *
+avl_findMin( AvlTree * tree, Node * node )
+{
+	while ( node )
+	{
+		if ( node->left )
+			node = node->left;
+		else
+			break;
+	}
 
+	return node;
+}
+#endif
 
+#ifndef _NON_RECURSIVE_
 static Node *
 avl_findMax( AvlTree * tree, Node * node )
 {
@@ -288,8 +391,23 @@ avl_findMax( AvlTree * tree, Node * node )
 
 	return foundNode;
 }
+#else
+static Node *
+avl_findMax( AvlTree * tree, Node * node )
+{
+	while ( node )
+	{
+		if ( node->right )
+			node = node->right;
+		else
+			break;
+	}
 
+	return node;
+}
+#endif
 
+#ifndef _NON_RECURSIVE_
 static Node *
 avl_find( AvlTree * tree, Node * node, void * e )
 {
@@ -307,6 +425,29 @@ avl_find( AvlTree * tree, Node * node, void * e )
 
 	return foundNode;
 }
+#else
+#warning "Using non-recursive find"
+static Node *
+avl_find( AvlTree * tree, Node * node, void * e )
+{
+	Node * foundNode = 0;
+	while ( node )
+	{
+		int comp = tree->compare( e, node + 1 );
+		if ( comp < 0 )
+			node = node->left;
+		else if ( comp > 0 )
+			node = node->right;
+		else
+		{
+			foundNode = node;
+			break;
+		}
+	}
+
+	return foundNode;
+}
+#endif
 
 
 static Node *

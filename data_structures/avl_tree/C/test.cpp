@@ -7,6 +7,8 @@
 
 #include <getopt.h>
 
+#include <sys/times.h>
+
 using namespace std;
 using namespace __gnu_cxx;
 
@@ -172,6 +174,8 @@ main( int argc, char ** argv )
 
 		long i;
 
+		struct tms t1,t2;
+		clock_t start = times(&t1);
 		for ( i = 0; i < v; ++i )
 		{
 			long x = random() % range;
@@ -241,8 +245,9 @@ main( int argc, char ** argv )
 				}
 			}
 		}
+		clock_t end = times(&t2);
 
-		printf("Inserts done.\n");
+		printf("Inserts done %d ticks.\n",end-start);
 
 		if ( AVL_validate( &a, compareLong, printLong ) )
 		{
@@ -255,6 +260,8 @@ main( int argc, char ** argv )
 			{
 				printf("Testing finds... %d %d\n", a.count, in_use.size());
 
+				struct tms t1, t2;
+				clock_t start = times(&t1);
 				for ( i = 0; i < range; ++i )
 				{
 					void * found = AVL_find( &a, &i );
@@ -281,13 +288,14 @@ main( int argc, char ** argv )
 						}
 					}
 				}
+				clock_t end = times(&t2);
 
 				if ( status != 0 )
 				{
 					printf("test failed\n");
 				}
 				else
-					printf("test successful\n");
+					printf("test successful: %d ticks\n",end - start);
 			}
 		}
 	}
