@@ -208,6 +208,52 @@ avl_allocNode( AvlTree * tree, void * e )
 }
 
 
+static int
+avl_rebalance_to_root( AvlTree * tree, Node * node )
+{
+	while ( node )
+	{
+		int  orig_height = node->height;
+
+		node->height = max( avl_height(node->left), avl_height(node->right) ) + 1;
+
+		Node ** gpc;
+
+		Node * gp = node->parent;
+
+		if ( gp )
+		{
+			if ( node == gp->right )
+				gpc = &gp->right;
+			else if ( node == gp->left )
+				gpc = &gp->left;
+			else
+			{
+				printf("mismatched parents shouldn't happen\n");
+
+				return -1;
+			}
+		}
+		else
+			gpc = &tree->root;
+
+		avl_rebalance( gpc );
+
+		node = *gpc;
+
+		if ( node )
+		{
+			if ( orig_height == node->height )
+				break;
+
+			node = node->parent;
+		}
+	}
+
+	return 0;
+}
+
+
 #ifndef _NON_RECURSIVE_
 static Node *
 avl_insert( AvlTree * tree, Node ** node, void * e )
@@ -304,7 +350,8 @@ avl_insert( AvlTree * tree, Node ** node, void * e )
 		tree->count++;
 
 		// Rebalance the tree
-
+		avl_rebalance_to_root( tree, parent );
+/*
 		while ( parent )
 		{
 			int  orig_height = parent->height;
@@ -343,6 +390,7 @@ avl_insert( AvlTree * tree, Node ** node, void * e )
 				parent = parent->parent;
 			}
 		}
+*/
 	}
 
 	return foundNode;
@@ -363,7 +411,7 @@ avl_findMin( AvlTree * tree, Node * node )
 	return foundNode;
 }
 #else
-static Node *
+static inline Node *
 avl_findMin( AvlTree * tree, Node * node )
 {
 	while ( node )
@@ -392,7 +440,7 @@ avl_findMax( AvlTree * tree, Node * node )
 	return foundNode;
 }
 #else
-static Node *
+static inline Node *
 avl_findMax( AvlTree * tree, Node * node )
 {
 	while ( node )
@@ -427,7 +475,7 @@ avl_find( AvlTree * tree, Node * node, void * e )
 }
 #else
 #warning "Using non-recursive find"
-static Node *
+static inline Node *
 avl_find( AvlTree * tree, Node * node, void * e )
 {
 	Node * foundNode = 0;
@@ -502,6 +550,8 @@ avl_remove( AvlTree * tree, Node ** node, void * e )
 			else
 				printf("Shouldn't have happend\n");
 
+			avl_rebalance_to_root( tree, parent );
+/*
 			while ( parent )
 			{
 				int  orig_height = parent->height;
@@ -540,6 +590,7 @@ avl_remove( AvlTree * tree, Node ** node, void * e )
 					parent = parent->parent;
 				}
 			}
+*/
 		}
 
 		if ( foundNode == *node )

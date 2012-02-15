@@ -81,12 +81,32 @@ main( int argc, char ** argv )
 	bool stopOnError = false;
 	bool quiet = true;
 	bool iterate = false;
+	bool performanceTest = false;
+	int i_repeat = 1,f_repeat = 1;
 
 	char c;
-    while ( (c = getopt(argc,argv,"s:d:r:evi")) != -1 )
+    while ( (c = getopt(argc,argv,"m:n:s:d:r:evip")) != -1 )
     {
         switch(c)
         {
+        	case 'n':
+        	{
+        		f_repeat = atoi(optarg);
+
+        		if ( f_repeat < 1 )
+        			printf("bad repeat value\n");
+
+        	} break;
+
+        	case 'm':
+        	{
+        		i_repeat = atoi(optarg);
+
+        		if ( i_repeat < 1 )
+        			printf("bad repeat value\n");
+
+        	} break;
+
             case 's':
             {
                 seed = atoi(optarg);
@@ -102,6 +122,12 @@ main( int argc, char ** argv )
             case 'r':
             {
                 range = atoi(optarg);
+
+            } break;
+
+            case 'p':
+            {
+            	performanceTest = true;
 
             } break;
 
@@ -122,6 +148,7 @@ main( int argc, char ** argv )
             	iterate = true;
 
             } break;
+
             default:
                 printf("bad option: %c\n",c);
                 return -1;;
@@ -163,6 +190,45 @@ main( int argc, char ** argv )
 			
 			AVL_print( &a, printLong );
 		}
+	}
+	else if ( performanceTest )
+	{
+		struct tms tms1, tms2;
+		clock_t t1, t2;
+		unsigned long delta;
+
+		long tps = sysconf(_SC_CLK_TCK);
+		printf( "Running performance test w/ %d nodes (%d tps)...\n", range, tps );
+
+		t1 = times(&tms1);
+		for ( int r = 0; r < i_repeat; ++r )
+			for ( long i = 0; i < v; ++i )
+				AVL_insert( &a, &i );
+		t2 = times(&tms2);
+
+		delta = t2 - t1;
+		printf( "Inserts took %d ticks (%d per 10^9)\n", delta, delta * 1000000000/(i_repeat * v * tps) );
+
+		if ( r_factor )
+		{
+			t1 = times(&tms1);
+			for ( long i = 0; i < v; ++i )
+				if ( (i % r_factor) == 0 )
+					AVL_remove( &a, &i );
+			t2 = times(&tms2);
+
+			delta = t2 - t1;
+			printf( "Removes took %d ticks (%d per 10^9)\n", delta, delta * 1000000000/(v * tps) );
+		}
+
+		t1 = times(&tms1);
+		for ( int r = 0; r < f_repeat; ++r )
+			for ( long i = 0; i < v; ++i )
+				AVL_find( &a, &i );
+		t2 = times(&tms2);
+
+		delta = t2 - t1;
+		printf( "Finds took %d ticks (%d per 10^9)\n", delta, delta * 1000000000/(f_repeat * v * tps) );
 	}
 	else
 	{

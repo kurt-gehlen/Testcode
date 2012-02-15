@@ -2,4 +2,4 @@
 DFLAGS = 
 
 all:
-	g++ -o test $(DFLAGS) -g test.cpp AvlTree.c
+	g++ -o test -O3 $(DFLAGS) -g test.cpp AvlTree.c
