@@ -13,7 +13,6 @@
 #include "sc_hash.h"
 
 
-
 int
 SCH_init( SC_Hashtable * ht, int tablesize, SegArray * array, HASHFUNC hash, COMPFUNC comp, ALLOCFUNC alloc, FREEFUNC dealloc, DELFUNC del )
 {
@@ -23,6 +22,7 @@ SCH_init( SC_Hashtable * ht, int tablesize, SegArray * array, HASHFUNC hash, COM
 		ht->array		= array;
 		ht->objsize		= array->objectSize - sizeof(int);
 		ht->count		= 0;
+		ht->maxdepth	=  0;
 		ht->hash		= hash;
 		ht->comp		= comp;
 		ht->del			= del;
@@ -89,12 +89,16 @@ SCH_insert( SC_Hashtable * ht, void * item, int * found )
 
 	hash_value %= ht->tablesize;
 
+	int depth = 0;
 	int v;
 	int * prev = &ht->table[hash_value];
 	int * node;
 
-	for	( node = SA_atIndex(ht->array,ht->table[hash_value]); node && (v = ht->comp(item,node + 1)) < 0; node = SA_atIndex(ht->array,*node) )
+	for	( node = SA_atIndex(ht->array,ht->table[hash_value]); node && (v = ht->comp(item,node + 1)) < 0; node = SA_atIndex(ht->array,*node), depth++ )
 		prev = node;
+
+	if ( depth > ht->maxdepth )
+		ht->maxdepth = depth;
 
 	if ( node && v == 0 ) // item already in table;
 	{

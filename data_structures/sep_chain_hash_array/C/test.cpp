@@ -20,8 +20,8 @@ uint64_t crc64Table[256];
 
 struct TestStruct
 {
-	SAL_Node	node;
 	long		key;
+	SAL_Node	node;
 	long		data;
 };
 
@@ -201,7 +201,7 @@ main( int argc, char ** argv )
 
     SegArray sa;
     SA_init( &sa, numobjects, 0x10, sizeof( HashNode ) );
-    SAL_init( &l_sal, &sa, 0, offset_of(HashNode,data) );
+    SAL_init( &l_sal, &sa, 0, offset_of(HashNode,data) + offset_of(TestStruct,node) );
 	for ( int i = 1; i < sa.numObjects - 1; ++i )
 		SAL_insertHead( &l_sal, i );
 

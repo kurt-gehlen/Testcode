@@ -28,6 +28,7 @@ typedef struct SC_Hashtable
 	int			count;
 	int	*		table;
 	SegArray *	array;
+	int			maxdepth;
 	HASHFUNC	hash;
 	COMPFUNC	comp;
 	DELFUNC		del;
