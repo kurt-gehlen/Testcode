@@ -15,20 +15,23 @@
 
 
 int
-SCH_init( SC_Hashtable * hashtable, int tablesize, int objsize, HASHFUNC hash, COMPFUNC comp, DELFUNC del )
+SCH_init( SC_Hashtable * ht, int tablesize, SegArray * array, HASHFUNC hash, COMPFUNC comp, ALLOCFUNC alloc, FREEFUNC dealloc, DELFUNC del )
 {
-	if ( (hashtable->table = (SC_Node **)malloc( tablesize * sizeof(int *) )) )
+	if ( (ht->table = (int *)malloc( tablesize * sizeof(int *) )) )
 	{
-		hashtable->tablesize	= tablesize;
-		hashtable->objsize		= objsize;
-		hashtable->count		= 0;
-		hashtable->hash			= hash;
-		hashtable->comp			= comp;
-		hashtable->del			= del;
+		ht->tablesize	= tablesize;
+		ht->array		= array;
+		ht->objsize		= array->objectSize - sizeof(int);
+		ht->count		= 0;
+		ht->hash		= hash;
+		ht->comp		= comp;
+		ht->del			= del;
+		ht->alloc		= alloc;
+		ht->dealloc		= dealloc;
 
 		int i;
 		for ( i = 0; i < tablesize; ++i )
-			hashtable->table[i] = 0;
+			ht->table[i] = -1;
 
 		return 0;
 	}
@@ -38,66 +41,62 @@ SCH_init( SC_Hashtable * hashtable, int tablesize, int objsize, HASHFUNC hash, C
 
 
 void
-SCH_delete( SC_Hashtable * hashtable )
+SCH_delete( SC_Hashtable * ht )
 {
 	int i;
-	for ( i = 0; i < hashtable->tablesize; ++i )
+	for ( i = 0; i < ht->tablesize; ++i )
 	{
-		int * node = hashtable->table[i];
-		while ( *node != -1 )
+		int index = ht->table[i];
+		while ( index != -1 )
 		{
-			int * next = CALC_PTR(*node);
+			int * object = SA_atIndex( ht->array, index );
 
-			if( hashtable->del )
-				hashtable->del( node + 1 );
+			if( ht->del )
+				ht->del( object + 1 );
 
-			//free( node );
-
-			node = next;
+			index = *object;
 		}
 	}
 
-	if ( hashtable->table )
-		hashtable->table;
+	if ( ht->table )
+		free(ht->table);
 }
 
 
 void *
-SCH_find( SC_Hashtable * hashtable, void * item )
+SCH_find( SC_Hashtable * ht, void * item )
 {
-	unsigned long hash_value = hashtable->hash( item );
+	unsigned long hash_value = ht->hash( item );
 
-	hash_value %= hashtable->tablesize;
+	hash_value %= ht->tablesize;
 
-	int node;
-	int * pnode;
+	int * node;
 	int v;
-	for	( node = hashtable->table[hash_value],pnode = CALC_PTR(node); node != -1 && (v = hashtable->comp(item,node + 1)) < 0; node = *pnode, pnode = CALC_PTR(node) )
+	for	( node = SA_atIndex(ht->array,ht->table[hash_value]); node && (v = ht->comp(item,node + 1)) < 0; node = SA_atIndex(ht->array,*node) )
 		;
 
-	if ( node != -1 && v == 0 )
-		return pnode + 1;
+	if ( node && v == 0 )
+		return node + 1;
 
 	return 0;
 }
 
 
 void *
-SCH_insert( SC_Hashtable * hashtable, void * item, int * found )
+SCH_insert( SC_Hashtable * ht, void * item, int * found )
 {
-	unsigned long hash_value = hashtable->hash( item );
+	unsigned long hash_value = ht->hash( item );
 
-	hash_value %= hashtable->tablesize;
+	hash_value %= ht->tablesize;
 
 	int v;
-	int * prev = &hashtable->table[hash_value];
-	int * pnode;
-	int node;
+	int * prev = &ht->table[hash_value];
+	int * node;
 
-	for	( node = hashtable->table[hash_value],pnode = CALC_PTR(node); node != -1 && (v = hashtable->comp(item,node + 1)) < 0; node = *pnode, pnode = CALC_PTR(node) )
-		prev = pnode;
+	for	( node = SA_atIndex(ht->array,ht->table[hash_value]); node && (v = ht->comp(item,node + 1)) < 0; node = SA_atIndex(ht->array,*node) )
+		prev = node;
 
-	if ( node != -1 && v == 0 ) // item already in table;
+	if ( node && v == 0 ) // item already in table;
 	{
 		if ( found )
 			*found = 1;
@@ -105,75 +104,78 @@ SCH_insert( SC_Hashtable * hashtable, void * item, int * found )
 		return node + 1;
 	}
 
-	int * newNode = OBTAIN_SLOT();
-	if ( newNode )
+	int newNodeIndex = ht->alloc();
+	int * newObject = SA_atIndex( ht->array, newNodeIndex );
+	if ( newObject )
 	{
-		memcpy( newNode + 1, item, hashtable->objsize );
-		*newNode = node;
-		*prev = CALC_INDEX(newNode);
-		hashtable->count++;
+		memcpy( newObject + 1, item, ht->objsize );
+		*newObject = *prev;
+		*prev = newNodeIndex;
+		ht->count++;
 	}
 
-	return newNode ? newNode + 1 : 0;
+	return newObject ? newObject + 1 : 0;
 }
 
 
 int
-SCH_remove( SC_Hashtable * hashtable, void * item, void * copy )
+SCH_remove( SC_Hashtable * ht, void * item, void * copy )
 {
-	unsigned long hash_value = hashtable->hash( item );
+	unsigned long hash_value = ht->hash( item );
 
-	hash_value %= hashtable->tablesize;
+	hash_value %= ht->tablesize;
 
-	int node;
-	int * prev = &hashtable->table[hash_value];
-	int * pnode;
 	int v;
-	for	( node = hashtable->table[hash_value],pnode = CALC_PTR(node); node != -1 && (v = hashtable->comp(item,node + 1)) < 0; node = *pnode, pnode = CALC_PTR(node) )
-		prev = pnode;
+	int * prev = &ht->table[hash_value];
+	int * node;
+
+	for	( node = SA_atIndex(ht->array,ht->table[hash_value]); node && (v = ht->comp(item,node + 1)) < 0; node = SA_atIndex(ht->array,*node) )
+		prev = node;
+
 
 	if ( !node || v != 0 ) // item not found
 		return 0;
 
-	*prev = CALC_PTR(*pnode);
-
 	if ( copy )
-		memcpy( copy, node + 1, hashtable->objsize );
+		memcpy( copy, node + 1, ht->objsize );
 
-	if ( hashtable->del )
-		hashtable->del( pnode + 1 );
+	if ( ht->del )
+		ht->del( node + 1 );
 
-	//free( node );
-	REMOVE_OBJECT(node);
+	int next = *node;
 
-	hashtable->count--;
+	ht->dealloc( *prev );
+
+	*prev = next;
+
+	ht->count--;
 
 	return 1;
 }
 
 
 void
-SCH_iterate( SC_Hashtable * hashtable, OPFUNC op )
+SCH_iterate( SC_Hashtable * ht, OPFUNC op )
 {
-	int i, size = hashtable->tablesize;
+	int i, size = ht->tablesize;
 	for	( i = 0; i < size; ++i )
 	{
-		SC_Node * node;
-		for ( node = hashtable->table[i]; node; node = node->next )
+		int * node;
+		for	( node = SA_atIndex(ht->array,ht->table[i]); node; node = SA_atIndex(ht->array,*node) )
 			op( node + 1, i );
 	}
 }
 
 
 void *
-SCH_first( SC_Hashtable * hashtable, int * last )
+SCH_first( SC_Hashtable * ht, int * last )
 {
-	SC_Node * ret = 0;
-	SC_Node ** table = hashtable->table;
+	int * ret = 0;
+	int * table = ht->table;
 
-	int i, size = hashtable->tablesize;
+	int i, size = ht->tablesize;
 	for ( i = 0; i < size; ++i )
-		if ( (ret = table[i]) )
+		if ( (ret = SA_atIndex(ht->array,table[i])) )
 			break;
 
 	*last = i;
@@ -183,18 +185,19 @@ SCH_first( SC_Hashtable * hashtable, int * last )
 
 
 void *
-SCH_next( SC_Hashtable * hashtable, void * cur, int * last )
+SCH_next( SC_Hashtable * ht, void * cur, int * last )
 {
-	SC_Node * ret = 0;
-	SC_Node ** table = hashtable->table;
-	SC_Node * node = (SC_Node *)cur - 1;
+	int * ret = 0;
+	int * table = ht->table;
+	int * node = (int *)cur - 1;
 
-	if ( node->next )
-		return node->next + 1;
+	int * next = SA_atIndex(ht->array,*node);
+	if ( next )
+		return next + 1;
 
-	int i, size = hashtable->tablesize;
+	int i, size = ht->tablesize;
 	for ( i = *last + 1; i < size; ++i )
-		if ( (ret = table[i]) )
+		if ( (ret = SA_atIndex(ht->array,table[i])) )
 			break;
 
 	*last = i;

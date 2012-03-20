@@ -1,5 +1,6 @@
 
 #include "sc_hash.h"
+#include "seg_array_list.h"
 
 #include <iostream>
 #include <string>
@@ -12,19 +13,35 @@
 using namespace std;
 using namespace __gnu_cxx;
 
+#define offset_of(x,y) (unsigned long)(&((x*)0)->y)
+
 #define    CRC64_ECMA_182 0xC96C5795D7870F42ULL // ECMA-182 standard crc polynomial
 uint64_t crc64Table[256];
 
-
-int compareLong( long * a, void * b )
+struct TestStruct
 {
-	return *(long *)b - *(long *)a;
+	SAL_Node	node;
+	long		key;
+	long		data;
+};
+
+struct HashNode
+{
+	int next;
+	TestStruct data;
+};
+
+int compareTest( TestStruct * a, TestStruct * b )
+{
+	return b->key - a->key;
 }
 
 
 static uint64_t
 crc64Hash( unsigned char * buffer )
 {
+	buffer += offset_of(TestStruct,key);
+
     uint64_t crc64 = -1ULL;
 
     // translate key to a uniform distribution via a standardized CRC function with uniform output
@@ -44,6 +61,25 @@ int printLong( void * a, int index )
 	return 0;
 }
 
+static SegArrayList l_sal;
+
+int
+getObject()
+{
+	int index;
+	TestStruct * ts = (TestStruct *)SAL_removeHead( &l_sal, &index );
+	if ( ts )
+		return index;
+	return -1;
+}
+
+
+void
+returnObject( int index )
+{
+	SAL_insertTail( &l_sal, index );
+}
+
 
 int
 main( int argc, char ** argv )
@@ -61,12 +97,19 @@ main( int argc, char ** argv )
 	bool performanceTest = false;
 	int i_repeat = 1,f_repeat = 1;
 	int tablesize = 100;
+	int numobjects = 0x10000;
 
 	char c;
-    while ( (c = getopt(argc,argv,"m:n:s:d:r:evipt:")) != -1 )
+    while ( (c = getopt(argc,argv,"a:m:n:s:d:r:evipt:")) != -1 )
     {
         switch(c)
         {
+        case 'a':
+        {
+        	numobjects = atoi(optarg);
+
+        } break;
+
         	case 'n':
         	{
         		f_repeat = atoi(optarg);
@@ -135,7 +178,7 @@ main( int argc, char ** argv )
 
             default:
                 printf("bad option: %c\n",c);
-                return -1;;
+                return -1;
         }
     }
 
@@ -156,7 +199,13 @@ main( int argc, char ** argv )
             *entry = (*entry >> 1) ^ (-(*entry & 1) & CRC64_ECMA_182);
     }
 
-	SCH_init( &a, tablesize, sizeof(long), (HASHFUNC)crc64Hash, (COMPFUNC)compareLong, 0 );
+    SegArray sa;
+    SA_init( &sa, numobjects, 0x10, sizeof( HashNode ) );
+    SAL_init( &l_sal, &sa, 0, offset_of(HashNode,data) );
+	for ( int i = 1; i < sa.numObjects - 1; ++i )
+		SAL_insertHead( &l_sal, i );
+
+    SCH_init( &a, tablesize, &sa, (HASHFUNC)crc64Hash, (COMPFUNC)compareTest, getObject, returnObject, 0 );
 	int save;
 
 	if ( !v )
@@ -165,17 +214,20 @@ main( int argc, char ** argv )
 		{
 			save = 0;
 
+			TestStruct ts;
+			ts.key = v;
+
 			switch( c )
 			{
 			case 'a':
-				if ( SCH_insert( &a, &v, &save ) ) cout << "inserted " << save << endl; else cout << "insert failed" << endl; break;
+				if ( SCH_insert( &a, &ts, &save ) ) cout << "inserted " << save << endl; else cout << "insert failed" << endl; break;
 			
 			case 'd':
 			case 'r':
-				if ( SCH_remove( &a, &v, 0 ) ) cout << "removed" << endl; else cout << "not removed" << endl; break;
+				if ( SCH_remove( &a, &ts, 0 ) ) cout << "removed" << endl; else cout << "not removed" << endl; break;
 
 			case 'f':
-				if ( SCH_find( &a, &v ) == 0 ) cout << "Not found" << endl; else cout << "found: " << endl;
+				if ( SCH_find( &a, &ts ) == 0 ) cout << "Not found" << endl; else cout << "found: " << endl;
 				break;
 
 			case 'q':
@@ -192,31 +244,45 @@ main( int argc, char ** argv )
 		long tps = sysconf(_SC_CLK_TCK);
 		printf( "Running performance test w/ %d nodes (%d tps)...\n", range, tps );
 
+		int failed = 0;
 		t1 = times(&tms1);
 		for ( int r = 0; r < i_repeat; ++r )
 			for ( long i = 0; i < v; ++i )
-				SCH_insert( &a, &i, &save );
+			{
+				TestStruct ts;
+				ts.key = i;
+				if ( !SCH_insert( &a, &ts, &save ) )
+					failed++;
+			}
 		t2 = times(&tms2);
 
 		delta = t2 - t1;
-		printf( "Inserts took %d ticks (%d per 10^9)\n", delta, delta * 1000000000/(i_repeat * v * tps) );
+		printf( "Inserts took %d ticks (%d per 10^9) (%d failed)\n", delta, delta * 1000000000/(i_repeat * v * tps), failed );
 
 		if ( r_factor )
 		{
 			t1 = times(&tms1);
 			for ( long i = 0; i < v; ++i )
 				if ( (i % r_factor) == 0 )
-					SCH_remove( &a, &i, 0 );
+				{
+					TestStruct ts;
+					ts.key = i;
+					SCH_remove( &a, &ts, 0 );
+				}
 			t2 = times(&tms2);
 
 			delta = t2 - t1;
-			printf( "Removes took %d ticks (%d per 10^9)\n", delta, delta * 1000000000/(v * tps) );
+			printf( "Removes took %d ticks (%d per 10^9)\n", delta, delta * 1000000000/((v/r_factor) * tps) );
 		}
 
 		t1 = times(&tms1);
 		for ( int r = 0; r < f_repeat; ++r )
 			for ( long i = 0; i < v; ++i )
-				SCH_find( &a, &i );
+			{
+				TestStruct ts;
+				ts.key = i;
+				SCH_find( &a, &ts );
+			}
 		t2 = times(&tms2);
 
 		delta = t2 - t1;
@@ -238,6 +304,10 @@ main( int argc, char ** argv )
 		{
 			long x = random() % range;
 			int op = 0,op2 = 0;
+
+			TestStruct ts;
+			ts.key = x;
+
 			if ( r_factor && (i%r_factor) == 0 )
 			{
 				long x2 = x;
@@ -246,12 +316,12 @@ main( int argc, char ** argv )
 				if ( in_use.find(x) == in_use.end() )
 				{
 					op2 = 0;
-					SCH_insert( &a, &x, &save );
+					SCH_insert( &a, &ts, &save );
 				}
 				else
 					sdcnt++;
 
-				if ( !SCH_remove( &a, &x, 0 ) )
+				if ( !SCH_remove( &a, &ts, 0 ) )
 				{
 					printf("How could we not find that %ld %s?\n", x, in_use.find( x ) == in_use.end() ? "huh?" : "" );
 					//break;
@@ -262,7 +332,7 @@ main( int argc, char ** argv )
 			}
 			else
 			{
-				SCH_insert( &a, &x, &save );
+				SCH_insert( &a, &ts, &save );
 				in_use.insert(x);
 				icnt++;
 			}
@@ -307,7 +377,9 @@ main( int argc, char ** argv )
 			clock_t start = times(&t1);
 			for ( i = 0; i < range; ++i )
 			{
-				void * found = SCH_find( &a, &i );
+				TestStruct ts;
+				ts.key = i;
+				void * found = SCH_find( &a, &ts );
 
 				if ( found != 0 && in_use.find(i) == in_use.end() )
 				{
@@ -323,7 +395,7 @@ main( int argc, char ** argv )
 
 				if ( found )
 				{
-					long val = *(long *)(found);
+					long val = ((TestStruct *)found)->key;
 					if ( val != i )
 					{
 						printf("Item found but wrong: %ld %ld\n",val,i);
