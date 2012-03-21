@@ -245,19 +245,25 @@ main( int argc, char ** argv )
 		printf( "Running performance test w/ %d nodes (%d tps)...\n", range, tps );
 
 		int failed = 0;
+		timespec ts1,ts2;
 		t1 = times(&tms1);
-		for ( int r = 0; r < i_repeat; ++r )
-			for ( long i = 0; i < v; ++i )
-			{
-				TestStruct ts;
-				ts.key = i;
-				if ( !SCH_insert( &a, &ts, &save ) )
-					failed++;
-			}
+		clock_gettime(CLOCK_PROCESS_CPUTIME_ID,&ts1);
+		for ( long i = 0; i < v; ++i )
+		{
+			TestStruct ts;
+			ts.key = i;
+			if ( !SCH_insert( &a, &ts, &save ) )
+				failed++;
+		}
+		clock_gettime(CLOCK_PROCESS_CPUTIME_ID,&ts2);
 		t2 = times(&tms2);
 
 		delta = t2 - t1;
 		printf( "Inserts took %d ticks (%d per 10^9) (%d failed)\n", delta, delta * 1000000000/(i_repeat * v * tps), failed );
+		unsigned long start = ts1.tv_sec * 1000000000 + ts1.tv_nsec;
+		unsigned long finish = ts2.tv_sec * 1000000000 + ts2.tv_nsec;
+		unsigned long deltaNsec = finish - start;
+		printf( "using other  clock, took %ld nsecs, %ld per \n", deltaNsec, deltaNsec/v );
 
 		if ( r_factor )
 		{
@@ -276,17 +282,25 @@ main( int argc, char ** argv )
 		}
 
 		t1 = times(&tms1);
+		clock_gettime(CLOCK_PROCESS_CPUTIME_ID,&ts1);
 		for ( int r = 0; r < f_repeat; ++r )
+		{
 			for ( long i = 0; i < v; ++i )
 			{
 				TestStruct ts;
 				ts.key = i;
 				SCH_find( &a, &ts );
 			}
+		}
+		clock_gettime(CLOCK_PROCESS_CPUTIME_ID,&ts2);
 		t2 = times(&tms2);
 
 		delta = t2 - t1;
 		printf( "Finds took %d ticks (%d per 10^9)\n", delta, delta * 1000000000/(f_repeat * v * tps) );
+		start = ts1.tv_sec * 1000000000 + ts1.tv_nsec;
+		finish = ts2.tv_sec * 1000000000 + ts2.tv_nsec;
+		deltaNsec = finish - start;
+		printf( "using other  clock, took %ld nsecs, %ld per \n", deltaNsec, deltaNsec/(v*f_repeat) );
 	}
 	else
 	{
