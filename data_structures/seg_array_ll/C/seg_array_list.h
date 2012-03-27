@@ -43,7 +43,7 @@ extern void * SAL_removeTail( SegArrayList *, int * );
 extern void * SAL_remove( SegArrayList *, int index );
 extern void * SAL_removeNode( SegArrayList *, SAL_Node *, int * );
 
-inline void * SAL_head( SegArrayList * sal, int * index )
+inline static void * SAL_head( SegArrayList * sal, int * index )
 {
 	if ( sal->headPtr->next != sal->head )
 	{

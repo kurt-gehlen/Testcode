@@ -14,15 +14,15 @@
 
 
 int
-SCH_init( SC_Hashtable * ht, int tablesize, SegArray * array, HASHFUNC hash, COMPFUNC comp, ALLOCFUNC alloc, FREEFUNC dealloc, DELFUNC del )
+SCH_init( SC_Hashtable * ht, int tablesize, int objectsize, SegArray * array, HASHFUNC hash, COMPFUNC comp, ALLOCFUNC alloc, FREEFUNC dealloc, DELFUNC del )
 {
 	if ( (ht->table = (int *)malloc( tablesize * sizeof(int *) )) )
 	{
 		ht->tablesize	= tablesize;
 		ht->array		= array;
-		ht->objsize		= array->objectSize - sizeof(int);
+		ht->objsize		= objectsize;
 		ht->count		= 0;
-		ht->maxdepth	=  0;
+		ht->maxdepth	= 0;
 		ht->hash		= hash;
 		ht->comp		= comp;
 		ht->del			= del;

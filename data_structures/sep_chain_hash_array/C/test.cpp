@@ -21,7 +21,6 @@ uint64_t crc64Table[256];
 struct TestStruct
 {
 	long		key;
-	SAL_Node	node;
 	long		data;
 };
 
@@ -29,7 +28,8 @@ struct HashNode
 {
 	int next;
 	TestStruct data;
-};
+	SAL_Node	node;
+} __attribute__((__packed__));
 
 int compareTest( TestStruct * a, TestStruct * b )
 {
@@ -56,8 +56,8 @@ int printLong( void * a, int index )
 {
 	if ( !a )
 		printf("What???\n");
-	long i = *(long *)a;
-	printf("%10i %ld\n",index,i);
+	TestStruct * ts = (TestStruct *)a;
+	printf("%10i %ld %ld\n",index,ts->key,ts->data);
 	return 0;
 }
 
@@ -67,7 +67,7 @@ int
 getObject()
 {
 	int index;
-	TestStruct * ts = (TestStruct *)SAL_removeHead( &l_sal, &index );
+	void * ts = SAL_removeHead( &l_sal, &index );
 	if ( ts )
 		return index;
 	return -1;
@@ -201,11 +201,11 @@ main( int argc, char ** argv )
 
     SegArray sa;
     SA_init( &sa, numobjects, 0x10, sizeof( HashNode ) );
-    SAL_init( &l_sal, &sa, 0, offset_of(HashNode,data) + offset_of(TestStruct,node) );
+    SAL_init( &l_sal, &sa, 0, offset_of(HashNode,node) );
 	for ( int i = 1; i < sa.numObjects - 1; ++i )
 		SAL_insertHead( &l_sal, i );
 
-    SCH_init( &a, tablesize, &sa, (HASHFUNC)crc64Hash, (COMPFUNC)compareTest, getObject, returnObject, 0 );
+    SCH_init( &a, tablesize, sizeof(TestStruct), &sa, (HASHFUNC)crc64Hash, (COMPFUNC)compareTest, getObject, returnObject, 0 );
 	int save;
 
 	if ( !v )
@@ -321,6 +321,7 @@ main( int argc, char ** argv )
 
 			TestStruct ts;
 			ts.key = x;
+			ts.data = i;
 
 			if ( r_factor && (i%r_factor) == 0 )
 			{
@@ -346,9 +347,12 @@ main( int argc, char ** argv )
 			}
 			else
 			{
-				SCH_insert( &a, &ts, &save );
-				in_use.insert(x);
-				icnt++;
+				save = 0;
+				if ( SCH_insert( &a, &ts, &save ) && !save )
+				{
+					in_use.insert(x);
+					icnt++;
+				}
 			}
 
 			if ( 0 )
@@ -430,7 +434,7 @@ main( int argc, char ** argv )
 	
 end:
 
-	printf("Table has %d entries\n", a.count );
+	printf("Table has %d entries (max chain %d)\n", a.count, a.maxdepth );
 	printf( "%d inserts, %d deletes (%d already in table) completed\n",icnt,dcnt,sdcnt);
 
 	if ( iterate )

@@ -36,7 +36,7 @@ typedef struct SC_Hashtable
 	FREEFUNC	dealloc;
 } SC_Hashtable;
 
-extern int		SCH_init	( SC_Hashtable * hashtable, int tablesize, SegArray *, HASHFUNC hash, COMPFUNC comp, ALLOCFUNC, FREEFUNC, DELFUNC del );
+extern int		SCH_init	( SC_Hashtable * hashtable, int tablesize, int objectsize, SegArray *, HASHFUNC hash, COMPFUNC comp, ALLOCFUNC, FREEFUNC, DELFUNC del );
 extern void		SCH_delete	( SC_Hashtable * hashtable );
 extern void *	SCH_find	( SC_Hashtable * hashtable, void * item );
 extern void *	SCH_insert	( SC_Hashtable * hashtable, void * item, int * found );

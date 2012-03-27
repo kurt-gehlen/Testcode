@@ -91,6 +91,8 @@ SAL_remove( SegArrayList * sal, int index )
 
 	sal->count--;
 
+	node->next = node->prev = -1;
+
 	return (void*)node - sal->offset;
 }
 
