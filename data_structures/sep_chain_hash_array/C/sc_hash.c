@@ -97,8 +97,11 @@ SCH_insert( SC_Hashtable * ht, void * item, int * found )
 	for	( node = SA_atIndex(ht->array,ht->table[hash_value]); node && (v = ht->comp(item,node + 1)) < 0; node = SA_atIndex(ht->array,*node), depth++ )
 		prev = node;
 
-	if ( depth > ht->maxdepth )
-		ht->maxdepth = depth;
+#ifdef __SORTED_DEPTH_COUNT__
+	int * tmp = node;
+	for ( ; tmp; tmp = SA_atIndex(ht->array,*tmp) )
+		depth++;
+#endif
 
 	if ( node && v == 0 ) // item already in table;
 	{
@@ -116,6 +119,8 @@ SCH_insert( SC_Hashtable * ht, void * item, int * found )
 		*newObject = *prev;
 		*prev = newNodeIndex;
 		ht->count++;
+		if ( depth >= ht->maxdepth )
+			ht->maxdepth = depth + 1;
 	}
 
 	return newObject ? newObject + 1 : 0;
@@ -148,6 +153,8 @@ SCH_remove( SC_Hashtable * ht, void * item, void * copy )
 
 	int next = *node;
 
+	*node = -1;
+
 	ht->dealloc( *prev );
 
 	*prev = next;
@@ -165,8 +172,14 @@ SCH_iterate( SC_Hashtable * ht, OPFUNC op )
 	for	( i = 0; i < size; ++i )
 	{
 		int * node;
+		int cnt = 0;
 		for	( node = SA_atIndex(ht->array,ht->table[i]); node; node = SA_atIndex(ht->array,*node) )
+		{
+			cnt++;
 			op( node + 1, i );
+		}
+		if ( cnt > ht->maxdepth )
+			printf("bad cnt %d at %d\n",cnt,i);
 	}
 }
 
@@ -204,7 +217,8 @@ SCH_next( SC_Hashtable * ht, void * cur, int * last )
 		if ( (ret = SA_atIndex(ht->array,table[i])) )
 			break;
 
-	*last = i;
+	if ( ret )
+		*last = i;
 
 	return ret ? ret + 1 : 0;
 }

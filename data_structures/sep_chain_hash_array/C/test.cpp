@@ -5,7 +5,7 @@
 #include <iostream>
 #include <string>
 #include <ext/hash_set>
-
+#include <map>
 #include <getopt.h>
 
 #include <sys/times.h>
@@ -30,10 +30,15 @@ struct HashNode
 	TestStruct data;
 	SAL_Node	node;
 } __attribute__((__packed__));
-
 int compareTest( TestStruct * a, TestStruct * b )
 {
 	return b->key - a->key;
+}
+
+static uint64_t
+modonly( unsigned char * buffer )
+{
+	return *(unsigned long *)buffer;
 }
 
 
@@ -51,6 +56,10 @@ crc64Hash( unsigned char * buffer )
     return crc64;
 }
 
+int doNothing( void * a, int index )
+{
+	return 0;
+}
 
 int printLong( void * a, int index )
 {
@@ -62,14 +71,16 @@ int printLong( void * a, int index )
 }
 
 static SegArrayList l_sal;
-
+static int l_NodeWordOffset = 0;
 int
 getObject()
 {
 	int index;
 	void * ts = SAL_removeHead( &l_sal, &index );
 	if ( ts )
-		return index;
+	{
+		return index - l_NodeWordOffset;
+	}
 	return -1;
 }
 
@@ -77,7 +88,7 @@ getObject()
 void
 returnObject( int index )
 {
-	SAL_insertTail( &l_sal, index );
+	SAL_insertTail( &l_sal, index + l_NodeWordOffset );
 }
 
 
@@ -98,17 +109,30 @@ main( int argc, char ** argv )
 	int i_repeat = 1,f_repeat = 1;
 	int tablesize = 100;
 	int numobjects = 0x10000;
+	bool synopsis = false;
+	HASHFUNC hash = (HASHFUNC)crc64Hash;
+	long tps = sysconf(_SC_CLK_TCK);
 
 	char c;
-    while ( (c = getopt(argc,argv,"a:m:n:s:d:r:evipt:")) != -1 )
+    while ( (c = getopt(argc,argv,"a:m:n:s:d:r:evipt:ch")) != -1 )
     {
         switch(c)
         {
-        case 'a':
+        case 'h':
         {
-        	numobjects = atoi(optarg);
+        	hash = (HASHFUNC)modonly;
+        }break;
 
-        } break;
+			case 'c':
+			{
+				synopsis = true;
+			} break;
+
+			case 'a':
+			{
+				numobjects = atoi(optarg);
+
+			} break;
 
         	case 'n':
         	{
@@ -199,13 +223,38 @@ main( int argc, char ** argv )
             *entry = (*entry >> 1) ^ (-(*entry & 1) & CRC64_ECMA_182);
     }
 
-    SegArray sa;
-    SA_init( &sa, numobjects, 0x10, sizeof( HashNode ) );
-    SAL_init( &l_sal, &sa, 0, offset_of(HashNode,node) );
-	for ( int i = 1; i < sa.numObjects - 1; ++i )
-		SAL_insertHead( &l_sal, i );
+    int wordsPerObject = sizeof(HashNode)/sizeof(int);
+    int numwords = wordsPerObject * numobjects;
 
-    SCH_init( &a, tablesize, sizeof(TestStruct), &sa, (HASHFUNC)crc64Hash, (COMPFUNC)compareTest, getObject, returnObject, 0 );
+    if ( !isPowerOf2(numwords) )
+    {
+    	numwords--;
+    	numwords |= numwords >> 1;
+    	numwords |= numwords >> 2;
+    	numwords |= numwords >> 4;
+    	numwords |= numwords >> 8;
+    	numwords |= numwords >> 16;
+    	numwords++;
+    }
+
+    SegArray sa;
+    if ( SA_init( &sa, numwords, 0x10, 4 ) == -1 )
+    	printf("Crap\n");
+#if 0
+SA_init( &sa, numobjects, 0x10, sizeof( HashNode ) );
+SAL_init( &l_sal, &sa, 0, offset_of(HashNode,node) );
+for ( int i = 1; i < sa.numObjects - 1; ++i )
+	SAL_insertHead( &l_sal, i );
+#else
+    numobjects = numwords / wordsPerObject;
+    printf("Using %d objects, %d(%x) words, %d words per object\n",numobjects,numwords,numwords,wordsPerObject);
+    int listNodeWordOffset = offset_of(HashNode,node)/sizeof(int);
+    SAL_init( &l_sal, &sa, listNodeWordOffset, 0 );
+    l_NodeWordOffset = listNodeWordOffset;
+	for ( int i = listNodeWordOffset + wordsPerObject; i < sa.numObjects - wordsPerObject; i += wordsPerObject )
+		SAL_insertHead( &l_sal, i );
+#endif
+    SCH_init( &a, tablesize, sizeof(TestStruct), &sa, hash, (COMPFUNC)compareTest, getObject, returnObject, 0 );
 	int save;
 
 	if ( !v )
@@ -241,7 +290,6 @@ main( int argc, char ** argv )
 		clock_t t1, t2;
 		unsigned long delta;
 
-		long tps = sysconf(_SC_CLK_TCK);
 		printf( "Running performance test w/ %d nodes (%d tps)...\n", range, tps );
 
 		int failed = 0;
@@ -325,25 +373,30 @@ main( int argc, char ** argv )
 
 			if ( r_factor && (i%r_factor) == 0 )
 			{
+				bool tryRemove = true;
 				long x2 = x;
 				op = 1;
 
 				if ( in_use.find(x) == in_use.end() )
 				{
 					op2 = 0;
-					SCH_insert( &a, &ts, &save );
+					if ( !SCH_insert( &a, &ts, &save ) )
+						tryRemove = false;
 				}
 				else
 					sdcnt++;
 
-				if ( !SCH_remove( &a, &ts, 0 ) )
+				if ( tryRemove )
 				{
-					printf("How could we not find that %ld %s?\n", x, in_use.find( x ) == in_use.end() ? "huh?" : "" );
-					//break;
-				}
+					if ( !SCH_remove( &a, &ts, 0 ) )
+					{
+						printf("How could we not find that %ld %s?\n", x, in_use.find( x ) == in_use.end() ? "huh?" : "" );
+						//break;
+					}
 
-				in_use.erase( x2 );
-				dcnt++;
+					in_use.erase( x2 );
+					dcnt++;
+				}
 			}
 			else
 			{
@@ -428,7 +481,10 @@ main( int argc, char ** argv )
 				printf("test failed\n");
 			}
 			else
-				printf("test successful: %d ticks\n",end - start);
+			{
+				unsigned long delta = end - start;
+				printf("test successful: %d ticks (%d nsec)\n",delta,delta * 1000000000/(range * tps));
+			}
 		}
 	}
 	
@@ -437,13 +493,54 @@ end:
 	printf("Table has %d entries (max chain %d)\n", a.count, a.maxdepth );
 	printf( "%d inserts, %d deletes (%d already in table) completed\n",icnt,dcnt,sdcnt);
 
+	if ( synopsis )
+	{
+		map<int,int> summary;
+		int sum = 0;
+		int i = 0;
+		int last = 0;
+		for ( void * itr = SCH_first( &a, &save ); itr; itr = SCH_next( &a, itr, &save ), i++ )
+		{
+			if ( last != save )
+			{
+				for ( last++; last < save; last++ )
+				{
+					summary[0]++;
+				}
+
+				summary[i]++;
+				sum += i;
+				i = 0;
+			}
+
+			last = save;
+		}
+
+		sum += i;
+		summary[i]++;
+		summary[0] += a.tablesize - save - 1;
+
+		printf("Summary: %d %d\n",a.count,sum);
+		sum = 0;
+		for ( map<int,int>::iterator itr = summary.begin(); itr != summary.end(); ++itr )
+		{
+			sum += itr->second;
+			printf("%3d: %d\n",itr->first,itr->second);
+		}
+		if ( sum != a.tablesize )
+			printf("Size mismatch: %d %d\n",sum,a.tablesize);
+	}
+
 	if ( iterate )
 	{
+		SCH_iterate( &a, doNothing );
+/*
 		int i = 0;
 		for ( void * itr = SCH_first( &a, &save ); itr; itr = SCH_next( &a, itr, &save ) )
 		{
 			printf( "%d: ", i++); printLong( itr, 0 ); printf("\n");
 		}
+*/
 	}
 
 	if ( !quiet )
